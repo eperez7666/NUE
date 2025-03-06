@@ -56,7 +56,14 @@ public class JwtUtil {
 
 
     public String generateToken(Authentication authentication) {
-        String username = ((UserDetails) authentication.getPrincipal()).getUsername();
+        Object principal = authentication.getPrincipal();
+        String username;
+
+        if (principal instanceof UserDetails) {
+            username = ((UserDetails) principal).getUsername();
+        } else {
+            username = principal.toString(); // Maneja el caso cuando no es UserDetails
+        }
 
         return Jwts.builder()
                 .setSubject(username)
@@ -65,6 +72,7 @@ public class JwtUtil {
                 .signWith(SECRET_KEY, SignatureAlgorithm.HS256)
                 .compact();
     }
+
 
     // ✅ MÉTODO NUEVO: Convierte un token en una autenticación válida para Spring Security
     public Authentication getAuthentication(String token, UserDetails userDetails) {
