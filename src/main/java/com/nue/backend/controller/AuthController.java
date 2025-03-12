@@ -1,14 +1,16 @@
 package com.nue.backend.controller;
 
-import java.util.List;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -46,113 +48,127 @@ public class AuthController {
         this.emailService = emailService;
     }
 
-    // 📌 Método reutilizable para respuestas de error
+    // ✅ Reusable method for error responses
     private ResponseEntity<ApiResponse> buildErrorResponse(int status, String message) {
         return ResponseEntity.status(status).body(new ApiResponse(status, message, null));
     }
 
-    // ✅ ENDPOINT: REGISTRAR USUARIO
     @PostMapping("/register")
-    @Operation(summary = "Registrar un usuario", description = "Permite registrar un usuario con sus datos básicos.")
+    @Operation(summary = "Register a user", description = "Allows registering a user with basic information.")
     public ResponseEntity<ApiResponse> register(
-            @RequestParam(name = "firstName") String firstName,
-            @RequestParam(name = "lastName") String lastName,
+            @RequestParam(name = "fullname") String fullname,
             @RequestParam(name = "emailAddress") String emailAddress,
             @RequestParam(name = "password") String password) {
 
         if (userRepository.findByEmailAddress(emailAddress).isPresent()) {
-            return buildErrorResponse(400, "Email ya registrado");
+            return buildErrorResponse(400, "The provided email address is already registered.");
         }
 
-        User newUser = new User(firstName, lastName, emailAddress, passwordEncoder.encode(password), Role.USER);
+        User newUser = new User(fullname, emailAddress, passwordEncoder.encode(password), Role.USER);
         userRepository.save(newUser);
 
-        return ResponseEntity.ok(new ApiResponse(200, "Usuario registrado exitosamente", null));
+        return ResponseEntity.ok(new ApiResponse(200, "User successfully registered.", null));
     }
 
-    // ✅ ENDPOINT: INICIO DE SESIÓN (LOGIN)
     @PostMapping("/login")
-    @Operation(summary = "Iniciar sesión", description = "Autentica un usuario y devuelve un mensaje de éxito.")
     public ResponseEntity<ApiResponse> login(
             @RequestParam(name = "emailAddress") String emailAddress,
             @RequestParam(name = "password") String password) {
 
         Optional<User> userOptional = userRepository.findByEmailAddress(emailAddress);
         if (userOptional.isEmpty()) {
-            return buildErrorResponse(400, "Usuario no encontrado");
+            return buildErrorResponse(400, "No user found with the provided email address.");
         }
 
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(emailAddress, password)
-        );
+        try {
+            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(emailAddress, password));
+        } catch (BadCredentialsException e) {
+            return buildErrorResponse(403, "Incorrect password. Please try again.");
+        }
 
-        // Se genera el token pero NO se expone en la respuesta
-        jwtUtil.generateToken(new UsernamePasswordAuthenticationToken(emailAddress, password));
-
-        return ResponseEntity.ok(new ApiResponse(200, "Inicio de sesión exitoso", null));
+        User user = userOptional.get();
+        return ResponseEntity.ok(new ApiResponse(200, "Login successful.",
+                Map.of("username", user.getFullname())));
     }
 
-    // ✅ ENDPOINT: SOLICITAR RECUPERACIÓN DE CONTRASEÑA
     @PostMapping("/forgot-password")
-    @Operation(summary = "Solicitar recuperación de contraseña", description = "Envía un correo con instrucciones para restablecer la contraseña.")
     public ResponseEntity<ApiResponse> forgotPassword(@RequestParam(name = "emailAddress") String emailAddress) {
 
         Optional<User> userOptional = userRepository.findByEmailAddress(emailAddress);
         if (userOptional.isEmpty()) {
-            return buildErrorResponse(400, "Correo no registrado");
+            return buildErrorResponse(400, "The provided email address is not registered.");
         }
 
         User user = userOptional.get();
-
-        // Generar un token de recuperación de contraseña
         String resetToken = jwtUtil.generateResetToken(user.getEmailAddress());
+        long expiresIn = 30 * 60;
 
-        // Guardar el token en la BD sin exponerlo en la URL
         user.setResetToken(resetToken);
         userRepository.save(user);
 
-        // Enviar email con un enlace seguro
-        String resetLink = "http://localhost:3000/reset-password";
-        emailService.sendPasswordResetInstructions(user.getEmailAddress(), resetLink);
+        emailService.sendPasswordResetNotification(user.getEmailAddress(), user.getFullname());
 
-        return ResponseEntity.ok(new ApiResponse(200, "Correo de recuperación enviado", null));
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("username", user.getFullname());
+        responseData.put("token", resetToken);
+        responseData.put("expiresIn", expiresIn);
+
+        return ResponseEntity.ok(new ApiResponse(200, "Password reset token successfully generated.", responseData));
     }
 
-    // ✅ ENDPOINT: RESTABLECER CONTRASEÑA
     @PostMapping("/reset-password")
-    @Operation(summary = "Restablecer contraseña", description = "Permite cambiar la contraseña con un token de recuperación.")
-    public ResponseEntity<ApiResponse> resetPassword(@RequestBody ResetPasswordRequest request) {
+    @Operation(summary = "Reset password", description = "Allows changing the password using a recovery token.")
+    public ResponseEntity<ApiResponse> resetPassword(@org.springframework.web.bind.annotation.RequestBody ResetPasswordRequest request) {
+
+        // 🔍 Debugging: Print received values
+        System.out.println("Received in reset-password: " + request);
+        System.out.println("Token: " + request.getToken());
+        System.out.println("New Password: " + request.getNewPassword());
+
+        if (request == null || request.getToken() == null || request.getNewPassword() == null) {
+            return buildErrorResponse(400, "Invalid request. Both 'token' and 'newPassword' fields are required.");
+        }
 
         String token = request.getToken();
         String newPassword = request.getNewPassword();
 
-        if (token == null || newPassword == null) {
-            return buildErrorResponse(400, "Datos incompletos");
+        try {
+            // Extract email from the token
+            String emailAddress = jwtUtil.extractUsername(token);
+            Optional<User> userOptional = userRepository.findByEmailAddress(emailAddress);
+
+            if (userOptional.isEmpty()) {
+                return buildErrorResponse(400, "Invalid or expired token. No user found.");
+            }
+
+            User user = userOptional.get();
+            String fullName = user.getFullname(); // Correctly extracting full name
+
+            // Check if the token has expired
+            if (jwtUtil.isTokenExpired(token)) {
+                return ResponseEntity.status(400).body(new ApiResponse(400, "The token has expired. Please request a new password reset.",
+                        Map.of("email", emailAddress, "fullName", fullName)));
+            }
+
+            // Validate the token
+            if (!jwtUtil.validateToken(token, new org.springframework.security.core.userdetails.User(
+                    user.getEmailAddress(), user.getPassword(), new ArrayList<>()))) {
+                return buildErrorResponse(400, "Invalid or expired token. Please request a new reset token.");
+            }
+
+            // Update the password
+            user.setPassword(passwordEncoder.encode(newPassword));
+            user.setResetToken(null);
+            userRepository.save(user);
+
+            // Send confirmation email
+            emailService.sendPasswordChangedEmail(user.getEmailAddress(), user.getFullname());
+
+            return ResponseEntity.ok(new ApiResponse(200, "Password successfully updated.",
+                    Map.of("email", emailAddress, "fullName", fullName)));
+
+        } catch (Exception e) {
+            return buildErrorResponse(400, "An error occurred while processing the request: " + e.getMessage());
         }
-
-        // Extraer email desde el token
-        String emailAddress = jwtUtil.extractUsername(token);
-        Optional<User> userOptional = userRepository.findByEmailAddress(emailAddress);
-        
-        if (userOptional.isEmpty()) {
-            return buildErrorResponse(400, "Token inválido o expirado");
-        }
-
-        User user = userOptional.get();
-
-        if (!jwtUtil.validateToken(token, new org.springframework.security.core.userdetails.User(
-                user.getEmailAddress(), user.getPassword(), List.of()))) {
-            return buildErrorResponse(400, "Token inválido o expirado");
-        }
-
-        // Actualizar la contraseña
-        user.setPassword(passwordEncoder.encode(newPassword));
-        user.setResetToken(null);
-        userRepository.save(user);
-
-        // Enviar correo de confirmación
-        emailService.sendPasswordChangedEmail(user.getEmailAddress());
-
-        return ResponseEntity.ok(new ApiResponse(200, "Contraseña actualizada correctamente", null));
     }
 }

@@ -48,11 +48,15 @@ public class JwtUtil {
         return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
     }
 
-    private Boolean isTokenExpired(String token) {
-        Date expiration = extractExpiration(token);
-        System.out.println("Fecha de expiración del token: " + expiration);
-        return expiration.before(new Date());
+    public Boolean isTokenExpired(String token) {
+        try {
+            Date expiration = extractExpiration(token);
+            return expiration.before(new Date());
+        } catch (Exception e) {
+            return true; // Si hay un error en la validación, asumimos que el token está expirado o es inválido
+        }
     }
+
 
 
     public String generateToken(Authentication authentication) {

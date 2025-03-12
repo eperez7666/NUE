@@ -13,33 +13,44 @@ public class EmailService {
     public EmailService(JavaMailSender mailSender) {
         this.mailSender = mailSender;
     }
-    
-    public void sendPasswordChangedEmail(String to) {
+
+    // ✅ Email notification when requesting password recovery
+    public void sendPasswordResetNotification(String to, String fullname) {
         MimeMessagePreparator messagePreparator = mimeMessage -> {
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
             helper.setTo(to);
-            helper.setSubject("Cambio de contraseña exitoso");
-            helper.setText("<p>Tu contraseña ha sido cambiada exitosamente.</p>"
-                        + "<p>Si no realizaste este cambio, por favor contacta a soporte de inmediato.</p>", true);
+            helper.setSubject("Password Reset Request");
+            helper.setText(
+                "<p>Hello " + fullname + ",</p>"
+              + "<p>We received a request to reset your password.</p>"
+              + "<p>If this was you, please open the app and continue the process.</p>"
+              + "<p>If you didn't make this request, please contact our support team immediately.</p>"
+              + "<p><strong>Note:</strong> This request will expire in 30 minutes.</p>"
+              + "<p>Best regards,</p>"
+              + "<p><strong>Support Team</strong></p>",
+              true
+            );
         };
-
         mailSender.send(messagePreparator);
     }
 
 
-    public void sendPasswordResetInstructions(String to, String resetLink) {
+    // ✅ Confirmation email when the password is changed
+    public void sendPasswordChangedEmail(String to, String fullname) {
         MimeMessagePreparator messagePreparator = mimeMessage -> {
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
             helper.setTo(to);
-            helper.setSubject("Restablecer tu contraseña");
-            helper.setText("<p>Has solicitado restablecer tu contraseña.</p>"
-                        + "<p>Haz clic en el siguiente enlace para proceder con la recuperación:</p>"
-                        + "<p><a href='" + resetLink + "'>Restablecer contraseña</a></p>"
-                        + "<p>Luego, ingresa el código de recuperación enviado en este correo.</p>"
-                        + "<p>Este código expirará en 30 minutos.</p>", true);
+            helper.setSubject("Successful Password Change");
+            helper.setText(
+                "<p>Hello " + fullname + ",</p>"
+              + "<p>Your password has been successfully changed.</p>"
+              + "<p>If you did not make this change, please contact our support team immediately.</p>"
+              + "<p>Best regards,</p>"
+              + "<p><strong>Support Team</strong></p>",
+              true
+            );
         };
 
         mailSender.send(messagePreparator);
     }
-
 }

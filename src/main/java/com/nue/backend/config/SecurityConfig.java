@@ -13,6 +13,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class SecurityConfig {
@@ -44,23 +46,37 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
             .csrf(csrf -> csrf.disable())
+            .cors(cors -> cors.configure(http)) // ✅ Habilitamos CORS
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
-                    "/swagger-ui/**",
+                    "/swagger-ui/**", // ✅ Documentación API
                     "/v3/api-docs/**",
                     "/swagger-resources/**",
-                    "/auth/register",
-                    "/auth/login",
-                    "/auth/forgot-password",  // ✅ Permitimos acceso sin autenticación
-                    "/auth/reset-password"    // ✅ Permitimos acceso sin autenticación
+                    "/auth/register", // ✅ Registro de usuario
+                    "/auth/login", // ✅ Inicio de sesión
+                    "/auth/forgot-password", // ✅ Recuperación de contraseña
+                    "/auth/reset-password", // ✅ Restablecimiento de contraseña
+                    "/public/**" // ✅ Endpoint para recursos públicos
                 ).permitAll()
-                .anyRequest().authenticated()
+                .anyRequest().authenticated() // ✅ Requiere autenticación para todo lo demás
             )
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .addFilterBefore(jwtFilter(), UsernamePasswordAuthenticationFilter.class)
             .build();
     }
 
-
-
+    // ✅ Configuración global de CORS
+    @Bean
+    public WebMvcConfigurer corsConfigurer() {
+        return new WebMvcConfigurer() {
+            @Override
+            public void addCorsMappings(CorsRegistry registry) {
+                registry.addMapping("/**") // Aplica CORS en todos los endpoints
+                        .allowedOriginPatterns("*") // ✅ Permite cualquier origen
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS") // Métodos permitidos
+                        .allowedHeaders("*") // Permite todos los headers
+                        .allowCredentials(true); // Permite credenciales (tokens, cookies)
+            }
+        };
+    }
 }
