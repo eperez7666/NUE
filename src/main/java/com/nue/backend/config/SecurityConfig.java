@@ -1,7 +1,5 @@
 package com.nue.backend.config;
 
-import com.nue.backend.security.JwtFilter;
-import com.nue.backend.security.JwtUtil;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -15,6 +13,9 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import com.nue.backend.security.JwtFilter;
+import com.nue.backend.security.JwtUtil;
 
 @Configuration
 public class SecurityConfig {
@@ -55,6 +56,7 @@ public class SecurityConfig {
                     "/auth/register", // ✅ Registro de usuario
                     "/auth/login", // ✅ Inicio de sesión
                     "/auth/forgot-password", // ✅ Recuperación de contraseña
+                    "/auth/get-token-password",
                     "/auth/reset-password", // ✅ Restablecimiento de contraseña
                     "/public/**" // ✅ Endpoint para recursos públicos
                 ).permitAll()

@@ -101,7 +101,7 @@ public class AuthController {
 
         User user = userOptional.get();
         String resetToken = jwtUtil.generateResetToken(user.getEmailAddress());
-        long expiresIn = 30 * 60;
+        
 
         user.setResetToken(resetToken);
         userRepository.save(user);
@@ -110,11 +110,35 @@ public class AuthController {
 
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("username", user.getFullname());
-        responseData.put("token", resetToken);
-        responseData.put("expiresIn", expiresIn);
+        
 
         return ResponseEntity.ok(new ApiResponse(200, "Password reset token successfully generated.", responseData));
     }
+    
+    @PostMapping("/get-token-password")
+    @Operation(summary = "Get reset password token", description = "Returns the temporary password reset token for a given email.")
+    public ResponseEntity<ApiResponse> getTokenForPasswordReset(@RequestParam(name = "emailAddress") String emailAddress) {
+
+        Optional<User> userOptional = userRepository.findByEmailAddress(emailAddress);
+        if (userOptional.isEmpty()) {
+            return buildErrorResponse(404, "User not found with the provided email.");
+        }
+
+        User user = userOptional.get();
+        String resetToken = user.getResetToken();
+
+        if (resetToken == null || resetToken.isEmpty()) {
+            return buildErrorResponse(400, "No reset token found. Please request a password reset first.");
+        }
+
+        // ✅ Devuelve el token sin enviar correos
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("email", emailAddress);
+        responseData.put("token", resetToken);
+
+        return ResponseEntity.ok(new ApiResponse(200, "Token retrieved successfully.", responseData));
+    }
+
 
     @PostMapping("/reset-password")
     @Operation(summary = "Reset password", description = "Allows changing the password using a recovery token.")
@@ -171,4 +195,5 @@ public class AuthController {
             return buildErrorResponse(400, "An error occurred while processing the request: " + e.getMessage());
         }
     }
+   
 }
